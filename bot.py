@@ -112,27 +112,8 @@ async def download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.callback_query.message.reply_text("בחר קטגוריה להורדה:", reply_markup=reply_markup)
 
-import os
-import sqlite3
-import zipfile
-import asyncio
-import platform
-from datetime import datetime
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from zipfile import ZipFile, ZIP_DEFLATED
-from threading import Lock  # מנעול למניעת כפילות הורדה
-import shutil
-import tempfile
-
-TOKEN = '7908068063:AAEoi6BHjEEk2O0t7SANwsZ1DC1Qph4x3hY'
-PASSWORD = 'olam_tov'  # סיסמה להגנה על ה-ZIP
-
-# מנעול למניעת הורדות כפולות
-download_lock = Lock()
-
 async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str):
-    """יוצר קובץ ZIP מוגן בסיסמה ושולח למשתמש."""
+    """יוצר ZIP מוגן בסיסמה ושולח למשתמש."""
     if not download_lock.acquire(blocking=False):
         await update.callback_query.answer("ההורדה כבר מתבצעת, נסה שוב בעוד רגע.")
         return
@@ -142,7 +123,6 @@ async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TY
         user = update.callback_query.from_user
         download_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # בדיקה אם קיימים קבצים בקטגוריה
         file_paths = [
             os.path.join(root, file)
             for root, _, files in os.walk(f'uploads/{category}')
@@ -154,21 +134,17 @@ async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await update.callback_query.message.reply_text("אין קבצים בקטגוריה שנבחרה.")
             return
 
-        # יצירת קובץ זמני עבור ה-ZIP
         temp_dir = tempfile.mkdtemp()
         temp_zip_path = os.path.join(temp_dir, f"{category}.zip")
 
-        # יצירת קובץ ZIP עם סיסמה
         with ZipFile(temp_zip_path, 'w', ZIP_DEFLATED) as zipf:
-            zipf.setpassword(PASSWORD.encode('utf-8'))  # הגנה על ה-ZIP עם סיסמה
+            zipf.setpassword(PASSWORD.encode('utf-8'))
             for file_path in file_paths:
                 zipf.write(file_path, os.path.basename(file_path))
 
-        # העברת ה-ZIP שנוצר לתיקייה הראשית
         shutil.move(temp_zip_path, zip_path)
         shutil.rmtree(temp_dir)
 
-        # שמירת פרטי ההורדה בבסיס הנתונים
         conn = sqlite3.connect('downloads.db')
         c = conn.cursor()
         c.execute('''
@@ -178,7 +154,6 @@ async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TY
         conn.commit()
         conn.close()
 
-        # שליחת הקובץ להורדה למשתמש
         await update.callback_query.answer()
         await update.callback_query.message.reply_document(
             document=open(zip_path, 'rb'),
