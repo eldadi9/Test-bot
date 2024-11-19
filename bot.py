@@ -138,9 +138,10 @@ async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TY
         temp_zip_path = os.path.join(temp_dir, f"{category}.zip")
 
         with ZipFile(temp_zip_path, 'w', ZIP_DEFLATED) as zipf:
-            zipf.setpassword(PASSWORD.encode('utf-8'))
+            zipf.setpassword(PASSWORD.encode('utf-8'))  # סיסמה להגנה לפתיחת הקובץ
             for file_path in file_paths:
                 zipf.write(file_path, os.path.basename(file_path))
+
 
         shutil.move(temp_zip_path, zip_path)
         shutil.rmtree(temp_dir)
@@ -165,6 +166,7 @@ async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TY
         download_lock.release()
 
 async def uploaded_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """מציג רשימה מסודרת של הקבצים שהועלו."""
     if update.message.from_user.id != 504019926:
         await update.message.reply_text("אין לך הרשאה לצפות במידע זה.")
         return
@@ -175,10 +177,30 @@ async def uploaded_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     files = c.fetchall()
     conn.close()
 
-    response = "\n".join([f"📄 {file[0]} - הועלה ע\"י {file[1]} (ID: {file[2]})\nקטגוריה: {file[3]}, תאריך: {file[4]}" for file in files]) or "לא נמצאו קבצים."
-    await update.message.reply_text(response)
+    if not files:
+        await update.message.reply_text("לא נמצאו קבצים.")
+        return
+
+    response = "📂 **רשימת קבצים שהועלו**\n"
+    response += "---------------------------------\n"
+    response += "{:<20} {:<10} {:<10} {:<10} {:<20}\n".format(
+        "שם הקובץ", "משתמש", "ID", "קטגוריה", "תאריך"
+    )
+    response += "---------------------------------\n"
+
+    for file in files:
+        response += "{:<20} {:<10} {:<10} {:<10} {:<20}\n".format(
+            file[0][:20],  # שם הקובץ
+            file[1] or "לא זמין",  # שם המשתמש
+            file[2],  # ID
+            file[3],  # קטגוריה
+            file[4]  # תאריך
+        )
+
+    await update.message.reply_text(f"```{response}```", parse_mode="Markdown")
 
 async def download_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """מציג לוג הורדות מסודר."""
     if update.message.from_user.id != 504019926:
         await update.message.reply_text("אין לך הרשאה לצפות במידע זה.")
         return
@@ -189,7 +211,18 @@ async def download_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     downloads = c.fetchall()
     conn.close()
 
-    response = "\n".join([f"📥 {log[0]} - הורד ע\"י {log[1]} (ID: {log[2]}) בתאריך {log[3]}" for log in downloads]) or "לא נמצאו הורדות."
+    if not downloads:
+        await update.message.reply_text("לא נמצאו הורדות.")
+        return
+
+    response = "📥 **לוג הורדות:**\n\n"
+    for log in downloads:
+        response += (
+            f"📄 שם הקובץ: {log[0]}\n"
+            f"👤 משתמש: {log[1] or 'לא זמין'} (ID: {log[2]})\n"
+            f"📅 תאריך: {log[3]}\n\n"
+        )
+
     await update.message.reply_text(response)
 
 async def main():
