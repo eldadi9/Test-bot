@@ -221,5 +221,126 @@ async def main():
         await app.updater.stop()
         await app.shutdown()
 
+# קוד קיים נשאר כפי שהוא
+
+# ייבוא ספריות נוספות
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# פונקציות חדשות
+def load_data():
+    """טוען נתונים מהמסד."""
+    conn = sqlite3.connect('downloads.db')
+    query_files = "SELECT * FROM files"
+    query_downloads = "SELECT * FROM downloads"
+    files_data = pd.read_sql_query(query_files, conn)
+    downloads_data = pd.read_sql_query(query_downloads, conn)
+    conn.close()
+    return files_data, downloads_data
+
+def plot_top_uploaders(files_data):
+    """גרף של משתמשים שהעלו הכי הרבה קבצים."""
+    top_uploaders = files_data['username'].value_counts().head(10)
+    plt.figure(figsize=(10, 6))
+    top_uploaders.plot(kind='bar')
+    plt.title("משתמשים שהעלו הכי הרבה קבצים")
+    plt.xlabel("שם משתמש")
+    plt.ylabel("מספר קבצים שהועלו")
+    plt.tight_layout()
+    plt.savefig('top_uploaders.png')
+    plt.close()
+
+def plot_download_activity(downloads_data):
+    """גרף פעילות הורדות לפי תאריכים."""
+    downloads_data['download_time'] = pd.to_datetime(downloads_data['download_time'])
+    downloads_data['date'] = downloads_data['download_time'].dt.date
+    daily_downloads = downloads_data.groupby('date').size()
+    plt.figure(figsize=(10, 6))
+    daily_downloads.plot(kind='line', marker='o')
+    plt.title("פעילות הורדות יומית")
+    plt.xlabel("תאריך")
+    plt.ylabel("מספר הורדות")
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig('daily_downloads.png')
+    plt.close()
+
+async def generate_reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """יוצר דוחות ויזואליים ושולח למשתמש."""
+    if update.message.from_user.id != 504019926:
+        await update.message.reply_text("אין לך הרשאה לצפות במידע זה.")
+        return
+
+    files_data, downloads_data = load_data()
+
+    # יצירת גרפים
+    plot_top_uploaders(files_data)
+    plot_download_activity(downloads_data)
+
+    # שליחת קבצי הגרפים למשתמש
+    await update.message.reply_document(
+        document=open('top_uploaders.png', 'rb'),
+        caption="גרף משתמשים שהעלו הכי הרבה קבצים"
+    )
+    await update.message.reply_document(
+        document=open('daily_downloads.png', 'rb'),
+        caption="גרף פעילות הורדות יומית"
+    )
+
+async def stats_summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """שולח למשתמש סיכום סטטיסטיקות כולל."""
+    if update.message.from_user.id != 504019926:
+        await update.message.reply_text("אין לך הרשאה לצפות במידע זה.")
+        return
+
+    files_data, downloads_data = load_data()
+
+    total_uploads = len(files_data)
+    total_downloads = len(downloads_data)
+    top_category = files_data['category'].value_counts().idxmax()
+
+    summary = (
+        f"📊 **סיכום סטטיסטיקות**:\n"
+        f"📁 סך כל הקבצים שהועלו: {total_uploads}\n"
+        f"📥 סך כל ההורדות: {total_downloads}\n"
+        f"📂 הקטגוריה הפופולרית ביותר: {top_category}"
+    )
+    await update.message.reply_text(summary, parse_mode='Markdown')
+
+# הוספת הפונקציות החדשות להנדלרים של Telegram
+async def main():
+    create_database()
+
+    app = Application.builder().token(TOKEN).build()
+
+    # הקוד הקיים
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("uploaded_files", uploaded_files))
+    app.add_handler(CommandHandler("download_logs", download_logs))
+    app.add_handler(CallbackQueryHandler(upload_callback, pattern='upload'))
+    app.add_handler(CallbackQueryHandler(download_callback, pattern='download'))
+    app.add_handler(CallbackQueryHandler(lambda u, c: download_zip_callback(u, c, 'פלייליסטים'), pattern='category_playlists'))
+    app.add_handler(CallbackQueryHandler(lambda u, c: download_zip_callback(u, c, 'אפליקציות'), pattern='category_apps'))
+    app.add_handler(MessageHandler(filters.Document.ALL, file_handler))
+
+    # הוספת הפונקציות החדשות
+    app.add_handler(CommandHandler("generate_reports", generate_reports))
+    app.add_handler(CommandHandler("stats_summary", stats_summary))
+
+    if platform.system() == "Windows":
+        asyncio.set_event_loop(asyncio.ProactorEventLoop())
+
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    try:
+        await asyncio.Future()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
+        await app.updater.stop()
+        await app.shutdown()
+
 if __name__ == '__main__':
     asyncio.run(main())
